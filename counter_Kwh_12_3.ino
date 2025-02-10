@@ -1,8 +1,8 @@
 //Parameters
-//Working version TEST 10 feb 19:54
+//Working version TEST 10 feb 21:00
 //
 const int aisPin  = A4; //a0-mini.... a4-nano
-const int numReadings  = 350;
+const int numReadings  = 30;
 int readings [numReadings];
 int readIndex  = 0;
 long total  = 0;
@@ -15,7 +15,8 @@ int over5kw_accu = 0; //when consumtion is over 5kW (KWh_warning) NB! int gives 
 int pause_peak_accu = 0;
 
 int accu_limit = 1000; //if over5kw_accu > accu_limit.  
-int KWh_limit = 4900; //Wh
+int KWh_limit = 4580;//5000-420; //Wh //safty margin. Goal is max. 5 kwH / hour
+float KWh_limit_f = 4.9; //Kwh //safty margin. Goal is max. 5 kwH / hour
 int KWh_warning = 5000; //Wh
 float kw_per_pulse = 0.001;
 float predict_hour_by_average = 0;
@@ -30,10 +31,11 @@ const byte cutoff_relay = 6; //rele NC normally closed Now also with NO
  long minute = 60000; // 60000 milliseconds in a minute
  //long second =  1000; // 1000 milliseconds in a second
 long refresh_time;
+long refresh_time_5;
 long refresh_time_hour;
 long tid_watt = 0;
  
-const long Count_result_after_this_time_passed = minute; //60000= 1 min 
+const long Count_result_after_this_time_passed = minute*5; //5 minutes 
 const long Count_result_after_one_hour_passed = hour; //60000= 1 min 
 
 int measured_value  = 0;
@@ -70,7 +72,14 @@ pause_peak_accu = 0;
 
 
 if (millis() > refresh_time) {  //om det gått ett minutt legg til en minutt(minutes_into) få hur langt in i timen som har passerat
-refresh_time = millis() + Count_result_after_this_time_passed;
+refresh_time = millis() + minute;
+Serial.print("predict_hour_by_average minute: "); //
+Serial.println(kw_per_pulse*blinkcounter_hour/minutes_into*60);
+minutes_into++;
+}
+
+if (millis() > (refresh_time_5)) {  //5 minutes//only make the relay change state every 5 minutes
+refresh_time_5 = millis() + Count_result_after_this_time_passed;
 
  Serial.println (" ");
  Serial.print(F("kwh brukt siste "));
@@ -83,13 +92,13 @@ refresh_time = millis() + Count_result_after_this_time_passed;
   ////Running average ?
   Serial.println (" ");  
   Serial.print(F("predict_hour_by_average: "));
-predict_hour_by_average = kw_per_pulse*blinkcounter_hour/minutes_into*60;
-minutes_into++;
+predict_hour_by_average = kw_per_pulse*blinkcounter_hour/(minutes_into-1)*60;
+//minutes_into++; //in
   Serial.print (predict_hour_by_average);
   Serial.println (F(" kWh")); 
  // if (predict_hour_by_average<2000 && minutes_into>30)
   //Serial.println("Watt now: ");
-  Serial.println("running average: ");
+  //Serial.println("running average: ");
 }   //refresh_time
  
 
@@ -98,7 +107,7 @@ minutes_into++;
 if (readAnalogSensor()==1) { //pulse from e-meter detected.
  
       watt = 3600000/(millis()-tid_watt); //power on this pulse 
-      blinkcounter_hour++; // number of pulses so far - in this hour 
+      blinkcounter_hour++; // number of pulses so far (watthours) - in this hour 
       
       //limitWish = runningAverage(); //runningAverage function
       //Serial.println(runningAverage());       Serial.print(" ");
@@ -148,11 +157,15 @@ if (readAnalogSensor()==1) { //pulse from e-meter detected.
               }
   */    
 //#3 Blue_state
-if (blinkcounter_hour>=(KWh_limit-100) || predict_hour_by_average>=KWh_limit) {
+if (blinkcounter_hour>=(KWh_limit) || predict_hour_by_average>=KWh_limit_f) {
+//if (predict_hour_by_average>=4.9) {
   digitalWrite(blue,LOW); //LOW = lyser
   digitalWrite(cutoff_relay,HIGH); //energizing coil on NC relay -> cut power to contactors on boiler and waterheater
 }
-else digitalWrite(cutoff_relay,LOW);
+else {
+  digitalWrite(cutoff_relay,LOW);
+}
+
 
   //    //#3 Blue_state
   //    if (blinkcounter_hour>=KWh_limit) {
@@ -161,7 +174,7 @@ else digitalWrite(cutoff_relay,LOW);
   //    } 
       //else digitalWrite(cutoff_relay,LOW); 
       ////if (blinkcounter_hour==1) digitalWrite(cutoff_relay,LOW); //if there is a new hour. reset relay.
-      Serial.print(F("Watt / Pulse siste time(Watt Timer): ")); Serial.print(watt); Serial.print(F(" / ")); Serial.println(blinkcounter_hour);
+      //Serial.print(F("Watt / Pulse siste time(Watt Timer): ")); Serial.print(watt); Serial.print(F(" / ")); Serial.println(blinkcounter_hour);
       //Serial.print (".");
       //Serial.print(F("Watt: ")); 
       //Serial.print(watt);       Serial.print(" ");
@@ -170,6 +183,8 @@ else digitalWrite(cutoff_relay,LOW);
       tid_watt = millis();
       watt= 0;
       } // (readAnalogSensor()==1)
+
+
 
 else {
     // if (measured_value > 1012) {
