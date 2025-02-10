@@ -1,5 +1,5 @@
 //Parameters
-//Working version TEST 9 feb 23:59
+//Working version TEST 10 feb 19:54
 //
 const int aisPin  = A4; //a0-mini.... a4-nano
 const int numReadings  = 350;
