@@ -1,21 +1,22 @@
 //Parameters
-//Working version TEST 
+//Working version TEST 9 feb 23:59
+//
 const int aisPin  = A4; //a0-mini.... a4-nano
-const int numReadings  = 200;
+const int numReadings  = 350;
 int readings [numReadings];
 int readIndex  = 0;
 long total  = 0;
 int limitWish = 0; 
 
 long blinkcounter_hour = 0;
-int pluss = 0;
+int minutes_into = 0;
 int watt = 0;
 int over5kw_accu = 0; //when consumtion is over 5kW (KWh_warning) NB! int gives max 32767 i.e. 32kwh in one hour maximum
 int pause_peak_accu = 0;
 
 int accu_limit = 1000; //if over5kw_accu > accu_limit.  
-int KWh_limit = 4000;
-int KWh_warning = 5000;
+int KWh_limit = 4900; //Wh
+int KWh_warning = 5000; //Wh
 float kw_per_pulse = 0.001;
 float predict_hour_by_average = 0;
 boolean flag_count = 1;
@@ -30,7 +31,7 @@ const byte cutoff_relay = 6; //rele NC normally closed Now also with NO
  //long second =  1000; // 1000 milliseconds in a second
 long refresh_time;
 long refresh_time_hour;
-long tid_watt;
+long tid_watt = 0;
  
 const long Count_result_after_this_time_passed = minute; //60000= 1 min 
 const long Count_result_after_one_hour_passed = hour; //60000= 1 min 
@@ -48,7 +49,7 @@ void setup() {
   pinMode(green, OUTPUT);
   pinMode(cutoff_relay, OUTPUT);
 
-  digitalWrite(blue,HIGH); //HIGH = LED avslått
+  digitalWrite(blue,HIGH); //HIGH = LED off
   digitalWrite(red,HIGH);
   digitalWrite(green,HIGH);
 
@@ -60,7 +61,7 @@ if (millis() > refresh_time_hour) {  //om det gått en timme
 refresh_time_hour = millis() + Count_result_after_one_hour_passed;
   Serial.print(F("kwh brukt denne timen: "));
   Serial.println(kw_per_pulse*blinkcounter_hour);
-pluss=0;  //teller opp minutter. Reset every whole hour
+minutes_into=0;  //teller opp minutter. Reset every whole hour
 blinkcounter_hour = 0; //number of "0,001Wh" reset every hour
 over5kw_accu = 0; //reset every hour
 pause_peak_accu = 0;
@@ -68,13 +69,13 @@ pause_peak_accu = 0;
 }   //refresh_time_hour  
 
 
-if (millis() > refresh_time) {  //om det gått ett minutt legg til en minutt(pluss) få hur langt in i timen som har passerat
+if (millis() > refresh_time) {  //om det gått ett minutt legg til en minutt(minutes_into) få hur langt in i timen som har passerat
 refresh_time = millis() + Count_result_after_this_time_passed;
 
  Serial.println (" ");
  Serial.print(F("kwh brukt siste "));
- Serial.print(pluss);//pluss=((hour/1000/60/60)+pluss-1);
-  //pluss++; //pluss er antal minutt etter times-reset
+ Serial.print(minutes_into);//minutes_into=((hour/1000/60/60)+minutes_into-1);
+  //minutes_into++; //minutes_into er antal minutt etter times-reset
  Serial.print(F(" minutt: "));
  Serial.print(kw_per_pulse*blinkcounter_hour);
  Serial.println(F(" kWh"));
@@ -82,11 +83,11 @@ refresh_time = millis() + Count_result_after_this_time_passed;
   ////Running average ?
   Serial.println (" ");  
   Serial.print(F("predict_hour_by_average: "));
-predict_hour_by_average  = kw_per_pulse*blinkcounter_hour/pluss*60;
-pluss++;
+predict_hour_by_average = kw_per_pulse*blinkcounter_hour/minutes_into*60;
+minutes_into++;
   Serial.print (predict_hour_by_average);
   Serial.println (F(" kWh")); 
- // if (predict_hour_by_average<2000 && pluss>30)
+ // if (predict_hour_by_average<2000 && minutes_into>30)
   //Serial.println("Watt now: ");
   Serial.println("running average: ");
 }   //refresh_time
@@ -94,28 +95,27 @@ pluss++;
 
  // readAnalogSensor();
 
-if ((readAnalogSensor()==1) && (flag_count == 0)) {
-    //if ((measured_value<50) && (flag_count == 0)) {//measured_value<80 (org) (31 er grensen 8feb2025) //om det kommer en blinkpuls fra e-meter så teller 
-                                                    //blinkcounter_hour opp en Watt-timme. dvs 0.001 kwh
-                                                    //LED på e-meter lyser, en pulse är detekterad
-    
-      watt = 3600000/(millis()-tid_watt); //effekt på denna ena pulsen
-      blinkcounter_hour++; // antall blink på 0,001 kwh dvs 1 Wh per blink-puls
+if (readAnalogSensor()==1) { //pulse from e-meter detected.
+ 
+      watt = 3600000/(millis()-tid_watt); //power on this pulse 
+      blinkcounter_hour++; // number of pulses so far - in this hour 
       
-      //#1 Green_state
+      //limitWish = runningAverage(); //runningAverage function
+      //Serial.println(runningAverage());       Serial.print(" ");
 
-      if (watt<KWh_warning && blinkcounter_hour<KWh_limit) {
+
+    //#1 Green_state
+
+      if (watt<KWh_warning) {// && blinkcounter_hour<KWh_limit) {
       digitalWrite(green,LOW); //LOW = lyser
       //pause_peak_accu++;
       }
 
-      //#2 Red_state
+    //#2 Red_state
       if (watt>=KWh_warning) 
       digitalWrite(red,LOW); //LOW = lyser
 
-//TEST
-      limitWish = runningAverage(); //runningAverage returnerer flytand gjennomsnitt
-      //Serial.println(runningAverage());       Serial.print(" ");
+      /* //TEST
       if ((limitWish>=5500) && (blinkcounter_hour<KWh_limit)) {
       //if ((runningAverage()>=KWh_warning) && blinkcounter_hour<KWh_limit) {
       digitalWrite(blue,LOW); //LOW = lyser
@@ -124,7 +124,7 @@ if ((readAnalogSensor()==1) && (flag_count == 0)) {
       if (limitWish<=4500 && blinkcounter_hour<KWh_limit) {
       digitalWrite(cutoff_relay,LOW);
       }
-//TEST
+      */ //TEST
 
 /*
       if (predict_hour_by_average>5500){
@@ -147,16 +147,21 @@ if ((readAnalogSensor()==1) && (flag_count == 0)) {
                 pause_peak_accu=0;
               }
   */    
+//#3 Blue_state
+if (blinkcounter_hour>=(KWh_limit-100) || predict_hour_by_average>=KWh_limit) {
+  digitalWrite(blue,LOW); //LOW = lyser
+  digitalWrite(cutoff_relay,HIGH); //energizing coil on NC relay -> cut power to contactors on boiler and waterheater
+}
+else digitalWrite(cutoff_relay,LOW);
 
-
-      //#3 Blue_state
-      if (blinkcounter_hour>=KWh_limit) {
-        digitalWrite(blue,LOW); //LOW = lyser
-        digitalWrite(cutoff_relay,HIGH); //energizing coil on NC relay -> cut power to contactors on boiler and waterheater
-      } 
+  //    //#3 Blue_state
+  //    if (blinkcounter_hour>=KWh_limit) {
+  //      digitalWrite(blue,LOW); //LOW = lyser
+  //      digitalWrite(cutoff_relay,HIGH); //energizing coil on NC relay -> cut power to contactors on boiler and waterheater
+  //    } 
       //else digitalWrite(cutoff_relay,LOW); 
-      if (blinkcounter_hour==1) digitalWrite(cutoff_relay,LOW); 
-      //Serial.print(F("Watt / Pulse siste time(Watt Timer): ")); Serial.print(watt); Serial.print(F(" / ")); Serial.println(blinkcounter_hour);
+      ////if (blinkcounter_hour==1) digitalWrite(cutoff_relay,LOW); //if there is a new hour. reset relay.
+      Serial.print(F("Watt / Pulse siste time(Watt Timer): ")); Serial.print(watt); Serial.print(F(" / ")); Serial.println(blinkcounter_hour);
       //Serial.print (".");
       //Serial.print(F("Watt: ")); 
       //Serial.print(watt);       Serial.print(" ");
@@ -166,23 +171,34 @@ if ((readAnalogSensor()==1) && (flag_count == 0)) {
       watt= 0;
       } // (readAnalogSensor()==1)
 
-      if (measured_value > 1012) {
-      digitalWrite(green,HIGH); //LED off
-      digitalWrite(red,HIGH); //LED off
-      digitalWrite(blue,HIGH); //LED off
-      flag_count = 0; //ready for new pulse from e-meter.
-      }
+else {
+    // if (measured_value > 1012) {
+      delay(5); //led a bit brighter
+    digitalWrite(green,HIGH); //LED off
+    digitalWrite(red,HIGH); //LED off
+    digitalWrite(blue,HIGH); //LED off
+    //flag_count = 0; //ready for new pulse from e-meter.
+      //}
+    }
 } //loop
 
 
 boolean readAnalogSensor() { /* function  */
-  boolean PulseDetected;
-  measured_value = analogRead(aisPin);
-  if (measured_value<50) {
+  static bool PulseDetected;// = 0;
+  static bool flag;// = 0;
+  //measured_value = analogRead(aisPin);
+  //if (measured_value<50) {
+  if (analogRead(aisPin)<50 && !flag) {//flag==0) {  
     PulseDetected=1;
+    flag=1;
+    }
+  else {
+    PulseDetected=0;
   }
-  else
-  PulseDetected=0;
+
+  if (analogRead(aisPin)>1012 && PulseDetected==0) {
+    flag=0;
+  }  
 
   return PulseDetected;
 }
@@ -207,6 +223,7 @@ long runningAverage() { // function flytande gjennomsnitt på konsumsjon. Hver p
   }
   // calculate the average:
   average = total / numReadings;
+Serial.print("AVG: ");
 Serial.println(average); 
   return average;
 }
